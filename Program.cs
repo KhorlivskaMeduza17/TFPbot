@@ -1,5 +1,6 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Types;
+using MySql.Data.MySqlClient;
 
 internal class Program
 {
