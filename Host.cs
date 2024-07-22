@@ -5,6 +5,8 @@ using MySql.Data.MySqlClient;
 
 public class Host
 {
+    private string _botToken;
+
     // Подія для обробки нових повідомлень
     public Action<ITelegramBotClient, Update>? OnMessage;
 
@@ -28,21 +30,22 @@ public class Host
         public string InstUrl { get; set; }
         public string ServicePrice { get; set; }
         public string Expected { get; set; }
+        public bool RegistrationStatus { get; set; } 
     }
 
-    // ЩО ЦЕ????????????
+    // НАПИСАТИ ЩО ЦЕ!!!!!!!!!!
     private string _connectionString;
 
     // Конструктор з токеном боту
     public Host(string token)
     {
         _bot = new TelegramBotClient(token);
+        _botToken = token; // Зберігаємо токен
 
-        // ЩО ЦЕ????????????
+        // НАПИСАТИ ЩО ЦЕ!!!!!!!!!!
         _connectionString = "Server=localhost;Port=3306;Database=mydatabase;User=root;Password=root_password;";
 
     }
-
 
     // Запуск боту
     public void Start()
@@ -131,6 +134,46 @@ public class Host
                     await UserRegistration(chatId);
                     return;
                 }
+                else if(user.Expected == "photo")
+                {
+                    if (update.Message.Photo != null)
+                    {
+                        // Отримання найбільшого розміру фото
+                        string fileId = update.Message.Photo.Last().FileId;
+                        
+                        // Оновлення даних користувача
+                        user.PhotoUrl = fileId;
+                        users[chatId] = user;
+                        user.Expected = null;
+
+                        await _bot.SendTextMessageAsync(chatId, "Ваше фото збережено!");
+                        await SaveUserData(user);
+                        await UserRegistration(chatId);
+                        return;
+                    }
+                }
+                else if(user.Expected == "inst")
+                {
+                    user.InstUrl = messageText;
+                    users[chatId] = user;
+                    user.Expected = null;
+
+                    await _bot.SendTextMessageAsync(chatId, $"Твоє посилання на інстаграм:\n{user.InstUrl}");
+                    await SaveUserData(user);
+                    await UserRegistration(chatId);
+                    return;
+                }
+                else if (user.Expected == "price")
+                {
+                    user.ServicePrice = messageText;
+                    users[chatId] = user;
+                    user.Expected = null;
+
+                    await _bot.SendTextMessageAsync(chatId, $"Встановлений прайс:\n{user.ServicePrice}");
+                    await SaveUserData(user);
+                    await UserRegistration(chatId);
+                    return;
+                }
             }
 
             // Обробка команди користувача
@@ -147,7 +190,8 @@ public class Host
                             // Створення нової структури даних користувача
                             users[chatId] = new UserData()
                             {
-                                UserId = chatId
+                                UserId = chatId,
+                                TelegramUsername = telegramUsername
                             };
 
                             await SendStartMessage(chatId);
@@ -197,41 +241,22 @@ public class Host
 
     private async Task UserRegistration(long chatId)
     {
+        var currentUserData = users[chatId];
         var RoleKeyboard = new ReplyKeyboardMarkup(
-            new KeyboardButton[] { "Фотограф", "Модель" }
+                new KeyboardButton[] { "Фотограф", "Модель" }
         );
 
-        var currentUserData = users[chatId];
-
         int step = 0;
-        if (currentUserData.Role == null)
-        {
-            step = 1;
-        }
-        else if (currentUserData.City == null)
-        {
-            step = 2;
-        }
-        else if (currentUserData.UserName == null)
-        {
-            step = 3;
-        }
-        else if (currentUserData.Age == null)
-        {
-            step = 4;
-        }
-        else if (currentUserData.Description == null)
-        {
-            step = 5;
-        }
-        else if (currentUserData.PhotoUrl == null)
-        {
-            step = 6;
-        }
-        else
-        {
-            step = 7;
-        }
+
+        if (currentUserData.Role == null) { step = 1; }
+        else if (currentUserData.City == null) { step = 2; }
+        else if (currentUserData.UserName == null) { step = 3; }
+        else if (currentUserData.Age == null) { step = 4; }
+        else if (currentUserData.Description == null) { step = 5; }
+        else if (currentUserData.PhotoUrl == null) { step = 6; }
+        else if(currentUserData.InstUrl == null) { step = 7; }
+        else if (currentUserData.ServicePrice == null) { step = 8;}
+        else { step = 9; }
 
         switch (step)
         {
@@ -262,6 +287,28 @@ public class Host
                 users[chatId] = currentUserData;
                 await _bot.SendTextMessageAsync(chatId, "Введи опис анкети!");
                 break;
+            case 6:
+                currentUserData.Expected = "photo";
+                users[chatId] = currentUserData;
+                await _bot.SendTextMessageAsync(chatId, "Тепер надішли фото: це мають бути референси, якщо ти фотограф, та селфі - якщо модель.");
+                break;
+            case 7:
+                currentUserData.Expected = "inst";
+                users[chatId] = currentUserData;
+                await _bot.SendTextMessageAsync(chatId, "Відправ посилання на свій інстаграм чи портфоліо.");
+                break;
+            case 8:
+                currentUserData.Expected = "price";
+                users[chatId] = currentUserData;
+                await _bot.SendTextMessageAsync(chatId, "Вкажи тип послуги: безкоштовно чи платно.");
+                break;
+            case 9:
+                currentUserData.RegistrationStatus = true;
+                currentUserData.Expected = null;
+                users[chatId] = currentUserData;
+                await _bot.SendTextMessageAsync(chatId, "Реєстрацію завершено! Ось як виглядає твоя анкета:");
+                await SendUserProfile(chatId);
+                break;
 
             default:
                 break;
@@ -276,11 +323,11 @@ public class Host
             {
                 await connection.OpenAsync();
 
-                string query = "INSERT INTO users (UserId, TelegramUsername, Role, City, UserName, Age, Description, PhotoUrl, ServicePrice) " +
-                               "VALUES (@UserId, @TelegramUsername, @Role, @City, @UserName, @Age, @Description, @PhotoUrl, @ServicePrice) " +
+                string query = "INSERT INTO users (UserId, TelegramUsername, Role, City, UserName, Age, Description, PhotoUrl, InstUrl, ServicePrice, Expected) " +
+                               "VALUES (@UserId, @TelegramUsername, @Role, @City, @UserName, @Age, @Description, @PhotoUrl, @InstUrl, @ServicePrice, @Expected) " +
                                "ON DUPLICATE KEY UPDATE " +
                                "TelegramUsername = @TelegramUsername, Role = @Role, City = @City, UserName = @UserName, Age = @Age, Description = @Description, " +
-                               "PhotoUrl = @PhotoUrl, ServicePrice = @ServicePrice";
+                               "PhotoUrl = @PhotoUrl, InstUrl = @InstUrl, ServicePrice = @ServicePrice, Expected = @Expected";
 
                 using (var command = new MySqlCommand(query, connection))
                 {
@@ -292,7 +339,9 @@ public class Host
                     command.Parameters.AddWithValue("@Age", user.Age);
                     command.Parameters.AddWithValue("@Description", user.Description);
                     command.Parameters.AddWithValue("@PhotoUrl", user.PhotoUrl);
+                    command.Parameters.AddWithValue("@InstUrl", user.InstUrl);
                     command.Parameters.AddWithValue("@ServicePrice", user.ServicePrice);
+                    command.Parameters.AddWithValue("@Expected", user.Expected);
 
                     await command.ExecuteNonQueryAsync();
                 }
@@ -301,6 +350,32 @@ public class Host
         catch (Exception ex)
         {
             Console.WriteLine($"Error saving user data: {ex.Message}");
+        }
+    }
+
+    private async Task SendUserProfile(long chatId)
+    {
+        if (users.ContainsKey(chatId))
+        {
+            var user = users[chatId];
+
+            if(!string.IsNullOrEmpty(user.PhotoUrl))
+            {
+                // Формування тексту з даними користувача
+                var userInfo = $"{user.UserName}, " +
+                    $"{user.City}, " +
+                    $"{user.Age} - " +
+                    $"{user.Description}\n\n" +
+                    $"Ціна послуги: {user.ServicePrice}\n" +
+                    $"Переглянути портфоліо: {user.InstUrl}";
+                    
+                InputFile userPhotoAsFile = new InputFileId(user.PhotoUrl);
+                await _bot.SendPhotoAsync(chatId, userPhotoAsFile, caption: userInfo);
+            }
+            else
+            {
+                await _bot.SendTextMessageAsync(chatId, "Користувача не знайдено.");
+            }
         }
     }
 }

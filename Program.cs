@@ -18,5 +18,4 @@ internal class Program
         // Очікування команди користувача
         Console.ReadLine();
     }
-
 }
