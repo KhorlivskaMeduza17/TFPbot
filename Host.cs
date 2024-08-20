@@ -6,17 +6,13 @@ using MySql.Data.MySqlClient;
 public class Host
 {
     private string _botToken;
-
-    // Подія для обробки нових повідомлень
-    public Action<ITelegramBotClient, Update>? OnMessage;
-
-     // Приватний екземпляр TelegramBotClient
     private TelegramBotClient _bot;
+    private string _connectionString;
 
-    // Словник для зберігання даних користувачів
+    // Словник для ТИМЧАСОВОГО зберігання даних користувачів
     private Dictionary<long, UserData> users = new Dictionary<long, UserData>();
 
-    // Структура зберігання даних користувачів
+    // Структура даних користувачів
     private struct UserData
     {
         public long UserId { get; set; }
@@ -33,18 +29,12 @@ public class Host
         public bool RegistrationStatus { get; set; } 
     }
 
-    // НАПИСАТИ ЩО ЦЕ!!!!!!!!!!
-    private string _connectionString;
-
     // Конструктор з токеном боту
     public Host(string token)
     {
         _bot = new TelegramBotClient(token);
         _botToken = token; // Зберігаємо токен
-
-        // НАПИСАТИ ЩО ЦЕ!!!!!!!!!!
         _connectionString = "Server=localhost;Port=3306;Database=mydatabase;User=root;Password=root_password;";
-
     }
 
     // Запуск боту
@@ -217,6 +207,9 @@ public class Host
                             await UserRegistration(chatId);
                         }
                     break;
+                    case "1":
+                        await RestartRegistration(chatId, telegramUsername);
+                    break;
                     default:
                         await _bot.SendTextMessageAsync(chatId, "Будь ласка, введіть коректну команду.");
                         break;
@@ -315,6 +308,59 @@ public class Host
         }
     }
 
+    private async Task DeleteUserData(long chatId){
+        try
+        {
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                string query = "DELETE FROM users WHERE UserId = @UserId";
+
+                using (var command = new MySqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@UserId", chatId);
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting user data: {ex.Message}");
+        }
+    }
+
+    private void DeleteUserFromDictionary(long chatId)
+    {
+        if (users.ContainsKey(chatId))
+        {
+            users.Remove(chatId);
+        }
+    }
+
+    // Оновити анкету / повторна реєстр. користувача
+    private async Task RestartRegistration(long chatId, string telegramUsername)
+    {
+        // Видалення попередніх даних користувача з бази даних
+        await DeleteUserData(chatId);
+        
+        // Видалення попередніх даних користувача зі словника
+        DeleteUserFromDictionary(chatId);
+        
+        // Створення нової структури даних користувача
+        users[chatId] = new UserData()
+        {
+            UserId = chatId,
+            TelegramUsername = telegramUsername
+        };
+
+        // Початок реєстрації заново
+        await SendStartMessage(chatId);
+        await UserRegistration(chatId);
+    }
+
+
+    // Зберегти дані користувача в БД.
     private async Task SaveUserData(UserData user)
     {
         try
@@ -323,11 +369,11 @@ public class Host
             {
                 await connection.OpenAsync();
 
-                string query = "INSERT INTO users (UserId, TelegramUsername, Role, City, UserName, Age, Description, PhotoUrl, InstUrl, ServicePrice, Expected) " +
-                               "VALUES (@UserId, @TelegramUsername, @Role, @City, @UserName, @Age, @Description, @PhotoUrl, @InstUrl, @ServicePrice, @Expected) " +
+                string query = "INSERT INTO users (UserId, TelegramUsername, Role, City, UserName, Age, Description, PhotoUrl, InstUrl, ServicePrice, Expected, RegistrationStatus) " +
+                               "VALUES (@UserId, @TelegramUsername, @Role, @City, @UserName, @Age, @Description, @PhotoUrl, @InstUrl, @ServicePrice, @Expected, @RegistrationStatus) " +
                                "ON DUPLICATE KEY UPDATE " +
                                "TelegramUsername = @TelegramUsername, Role = @Role, City = @City, UserName = @UserName, Age = @Age, Description = @Description, " +
-                               "PhotoUrl = @PhotoUrl, InstUrl = @InstUrl, ServicePrice = @ServicePrice, Expected = @Expected";
+                               "PhotoUrl = @PhotoUrl, InstUrl = @InstUrl, ServicePrice = @ServicePrice, Expected = @Expected, RegistrationStatus = @RegistrationStatus";
 
                 using (var command = new MySqlCommand(query, connection))
                 {
@@ -342,6 +388,7 @@ public class Host
                     command.Parameters.AddWithValue("@InstUrl", user.InstUrl);
                     command.Parameters.AddWithValue("@ServicePrice", user.ServicePrice);
                     command.Parameters.AddWithValue("@Expected", user.Expected);
+                    command.Parameters.AddWithValue("@RegistrationStatus", user.RegistrationStatus);
 
                     await command.ExecuteNonQueryAsync();
                 }
@@ -353,6 +400,7 @@ public class Host
         }
     }
 
+    // Надіслати користувачу його анкету 
     private async Task SendUserProfile(long chatId)
     {
         if (users.ContainsKey(chatId))
