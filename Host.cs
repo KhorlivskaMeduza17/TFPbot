@@ -202,13 +202,31 @@ public class Host
                             // Збереження змін
                             users[chatId] = newUserData;
 
-                            await _bot.SendTextMessageAsync(chatId, "Ви обрали роль: " + newUserData.Role);
+                            // Створення пустої клавіатури
+                            var emptyKeyboard = new ReplyKeyboardRemove();
+
+                            await _bot.SendTextMessageAsync(chatId, "Ви обрали роль: " + newUserData.Role, replyMarkup: emptyKeyboard);
                             await SaveUserData(newUserData);
                             await UserRegistration(chatId);
                         }
                     break;
+
                     case "1":
+                    case "1. наново заповнити анкету":
                         await RestartRegistration(chatId, telegramUsername);
+                    break;
+                    case "2":
+                    case "2. дивитись анкети інших":
+                        await _bot.SendTextMessageAsync(chatId, "Функція ще в розробці.");
+                    break;
+                    case "3":
+                    case "3. дивитись мою анкету":
+                        await _bot.SendTextMessageAsync(chatId, "Ось як виглядає твоя анкета: ");
+                        await SendUserProfile(chatId);
+                    break;
+                    case "4":
+                    case "4. вимкнути мою анкету":
+                        await _bot.SendTextMessageAsync(chatId, "Функція ще в розробці.");
                     break;
                     default:
                         await _bot.SendTextMessageAsync(chatId, "Будь ласка, введіть коректну команду.");
@@ -302,7 +320,6 @@ public class Host
                 await _bot.SendTextMessageAsync(chatId, "Реєстрацію завершено! Ось як виглядає твоя анкета:");
                 await SendUserProfile(chatId);
                 break;
-
             default:
                 break;
         }
@@ -358,7 +375,6 @@ public class Host
         await SendStartMessage(chatId);
         await UserRegistration(chatId);
     }
-
 
     // Зберегти дані користувача в БД.
     private async Task SaveUserData(UserData user)
@@ -424,6 +440,27 @@ public class Host
             {
                 await _bot.SendTextMessageAsync(chatId, "Користувача не знайдено.");
             }
+
+            await SendMainMenu(chatId);
         }
+    }
+
+    private async Task SendMainMenu(long chatId){
+        var menuKeyboard = new ReplyKeyboardMarkup(new[]
+        {
+            new KeyboardButton("1. Наново заповнити анкету"),
+            new KeyboardButton("2. Дивитись анкети інших"),
+            new KeyboardButton("3. Дивитись мою анкету"),
+            new KeyboardButton("4. Вимкнути мою анкету")
+        })
+        {
+            ResizeKeyboard = true
+        };
+
+        await _bot.SendTextMessageAsync(
+            chatId, "1. Наново заповнити анкету"
+            + "\n2. Дивитись анкети інших"
+            + "\n3. Дивитись мою анкету"
+            + "\n4. Вимкнути мою анкету", replyMarkup: menuKeyboard);
     }
 }

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TFPbot")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0385d849edefdfdf109374ad460837b4c3e997d1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7b9b69fa093967117b1b40f44458d3382b1a9295")]
 [assembly: System.Reflection.AssemblyProductAttribute("TFPbot")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TFPbot")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
