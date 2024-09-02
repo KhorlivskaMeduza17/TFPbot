@@ -419,11 +419,13 @@ public class Host
     // Надіслати користувачу його анкету 
     private async Task SendUserProfile(long chatId)
     {
-        if (users.ContainsKey(chatId))
-        {
-            var user = users[chatId];
+        // Отримати дані користувача з бази даних
+        UserData user = await GetUserDataFromDatabase(chatId);
 
-            if(!string.IsNullOrEmpty(user.PhotoUrl))
+        // Перевірка, чи є такі дані в базі даних
+        if (user.UserId != 0)
+        {
+            if (!string.IsNullOrEmpty(user.PhotoUrl))
             {
                 // Формування тексту з даними користувача
                 var userInfo = $"{user.UserName}, " +
@@ -432,17 +434,66 @@ public class Host
                     $"{user.Description}\n\n" +
                     $"Ціна послуги: {user.ServicePrice}\n" +
                     $"Переглянути портфоліо: {user.InstUrl}";
-                    
+
                 InputFile userPhotoAsFile = new InputFileId(user.PhotoUrl);
                 await _bot.SendPhotoAsync(chatId, userPhotoAsFile, caption: userInfo);
             }
             else
             {
-                await _bot.SendTextMessageAsync(chatId, "Користувача не знайдено.");
+                await _bot.SendTextMessageAsync(chatId, "Ваша анкета ще не містить фото.");
             }
 
             await SendMainMenu(chatId);
         }
+        else
+        {
+            await _bot.SendTextMessageAsync(chatId, "Анкета користувача не знайдена.");
+        }
+    }
+
+    private async Task<UserData> GetUserDataFromDatabase(long chatId)
+    {
+        UserData user = new UserData();
+
+        try
+        {
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                string query = "SELECT * FROM users WHERE UserId = @UserId LIMIT 1";
+
+                using (var command = new MySqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@UserId", chatId);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        if (await reader.ReadAsync())
+                        {
+                            user.UserId = chatId;
+                            user.TelegramUsername = reader["TelegramUsername"].ToString();
+                            user.Role = reader["Role"].ToString();
+                            user.City = reader["City"].ToString();
+                            user.UserName = reader["UserName"].ToString();
+                            user.Age = reader["Age"].ToString();
+                            user.Description = reader["Description"].ToString();
+                            user.PhotoUrl = reader["PhotoUrl"].ToString();
+                            user.InstUrl = reader["InstUrl"].ToString();
+                            user.ServicePrice = reader["ServicePrice"].ToString();
+                            user.Expected = reader["Expected"].ToString();
+                            user.RegistrationStatus = Convert.ToBoolean(reader["RegistrationStatus"]);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching user data: {ex.Message}");
+        }
+
+        return user;
     }
 
     private async Task SendMainMenu(long chatId){
